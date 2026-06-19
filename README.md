@@ -1,147 +1,165 @@
-# 🚀  AI Intelligence Platform
+# 🚀 Document Intelligence Platform
 
-### RAG Based AI-Powered Document Intelligence Platform
+> An AI-powered Document Intelligence Platform that allows users to upload documents, chat with them using Retrieval-Augmented Generation (RAG), generate summaries, and retrieve context-aware answers powered by Gemini AI.
 
-DocuMind AI is a modern Retrieval-Augmented Generation (RAG) platform that allows users to upload documents, chat with their content, generate summaries, and retrieve accurate answers using Gemini AI, ChromaDB, and Redis.
-
-Built with FastAPI, React, ChromaDB, Redis, and Google Gemini, the platform provides intelligent document understanding with semantic search, memory, caching, and multi-document support.
+![React](https://img.shields.io/badge/React-19-blue?logo=react)
+![FastAPI](https://img.shields.io/badge/FastAPI-Backend-green?logo=fastapi)
+![Python](https://img.shields.io/badge/Python-3.11-yellow?logo=python)
+![Docker](https://img.shields.io/badge/Docker-Enabled-blue?logo=docker)
+![Redis](https://img.shields.io/badge/Redis-Caching-red?logo=redis)
+![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI/CD-success?logo=githubactions)
 
 ---
 
-## ✨ Features
+# 📌 Overview
 
-### 📄 Document Processing
+Document Intelligence Platform is a full-stack AI application that enables users to upload multiple documents and interact with them using natural language.
 
-* Upload PDF, DOCX, and TXT files
-* Multi-file upload support
-* Automatic text extraction
-* Smart text chunking
-* Embedding generation using Sentence Transformers
+The platform leverages Retrieval-Augmented Generation (RAG) to provide accurate, context-aware answers grounded in uploaded document content.
 
-### 🤖 AI-Powered Chat
+---
+
+# ✨ Features
+
+## 📄 Multi-Document Upload
+
+* Upload multiple PDFs and documents
+* Automatic document ingestion
+* Intelligent document processing
+
+## 🤖 AI-Powered Question Answering
 
 * Ask questions about uploaded documents
-* Context-aware responses using RAG
-* Multi-document retrieval
-* Document-specific summarization
-* Source citations for transparency
+* Context-aware answers using Gemini AI
+* Retrieval-Augmented Generation (RAG)
 
-### 🧠 Intelligent Retrieval
+## 🔍 Semantic Search
 
 * ChromaDB Vector Database
-* Semantic similarity search
-* Smart document retrieval pipeline
-* Context injection for accurate answers
+* Embedding-based retrieval
+* High relevance document matching
 
-### ⚡ Performance Optimization
+## 📝 Document Summarization
 
-* Redis Chat Memory
-* Redis Question Cache
-* Faster repeated responses
-* Reduced LLM API usage
+* AI-generated summaries
+* Quick understanding of large documents
 
-### 🌐 Additional Capabilities
+## ⚡ Redis Integration
 
-* Web Search Integration
-* Calculator Tool
-* Document Summaries
-* Dark Mode Support
-* Modern ChatGPT-Inspired UI
+* Chat memory
+* Response caching
+* Improved performance
+
+## 🎨 Modern UI
+
+* React + Vite Frontend
+* Clean ChatGPT-inspired interface
+* Dark / Light Theme
+
+## 🐳 Docker Support
+
+* Containerized backend
+* Easy deployment
+* Portable environment
+
+## ⚙️ CI/CD Pipeline
+
+* GitHub Actions
+* Automatic frontend build verification
+* Automatic backend validation
 
 ---
 
-## 🏗️ System Architecture
+# 🏗️ Architecture
 
-Frontend (React + Vite)
-
+User Uploads Documents
 ↓
-
-FastAPI Backend
-
+Text Extraction
 ↓
-
-Redis Cache + Chat Memory
-
+Chunking
 ↓
-
+Embeddings
+↓
 ChromaDB Vector Store
-
 ↓
-
-Google Gemini AI
-
+Semantic Retrieval
 ↓
-
-Document Intelligence & Retrieval
+Gemini AI
+↓
+Context-Aware Response
 
 ---
 
-## 🛠️ Tech Stack
+# 🛠️ Tech Stack
 
 ### Frontend
 
-* React
+* React.js
 * Vite
-* Tailwind CSS
-* React Icons
-* React Dropzone
+* Axios
 
 ### Backend
 
 * FastAPI
 * Python
-* Uvicorn
 
 ### AI & RAG
 
-* Google Gemini
+* Google Gemini AI
+* ChromaDB
 * Sentence Transformers
-* ChromaDB
-* Retrieval-Augmented Generation (RAG)
 
-### Database & Caching
+### Caching
 
-* ChromaDB
 * Redis
+
+### DevOps
+
+* Docker
+* GitHub Actions
 
 ### Deployment
 
-* Docker
-* Render 
-* GitHub Actions CI/CD 
+* Render
+* Vercel
 
 ---
 
-## 📂 Project Structure
+# 📂 Project Structure
 
 ```text
-AI-Resume-Assistant/
-
-├── backend/
-│   ├── app/
-│   │   ├── api/
-│   │   ├── services/
-│   │   ├── tools/
-│   │   ├── utils/
-│   │   └── vectorstore/
-│   │
-│   └── uploads/
+Document-Intelligence-Platform
 │
-├── frontend/
-│   ├── src/
-│   ├── public/
+├── backend
+│   ├── app
+│   │   ├── api
+│   │   ├── services
+│   │   ├── tools
+│   │   └── vectorstore
+│   │
+│   └── requirements.txt
+│
+├── frontend
+│   ├── src
+│   ├── public
 │   └── package.json
 │
-├── requirements.txt
 ├── Dockerfile
+├── .dockerignore
 └── README.md
 ```
 
----
+# 🚀 Local Setup
 
-## 🚀 Getting Started
+## Clone Repository
 
-### Backend
+```bash
+git clone https://github.com/Subhadeep-pan/Document-Intelligence-Platform.git
+
+cd Document-Intelligence-Platform
+```
+
+## Backend Setup
 
 ```bash
 cd backend
@@ -151,25 +169,45 @@ python -m venv venv
 venv\Scripts\activate
 
 pip install -r requirements.txt
+```
 
+Create `.env`
+
+```env
+GEMINI_API_KEY=YOUR_API_KEY
+```
+
+Run Backend
+
+```bash
 uvicorn backend.app.main:app --reload
 ```
 
-Backend runs at:
+Backend URL:
 
 ```text
 http://127.0.0.1:8000
 ```
 
-Swagger Documentation:
+---
 
-```text
-http://127.0.0.1:8000/docs
+## Redis Setup
+
+```bash
+docker run -d -p 6379:6379 redis
+```
+
+Verify
+
+```bash
+docker ps
 ```
 
 ---
 
-### Frontend
+## Frontend Setup
+
+Open new terminal
 
 ```bash
 cd frontend
@@ -179,7 +217,7 @@ npm install
 npm run dev
 ```
 
-Frontend runs at:
+Frontend URL
 
 ```text
 http://localhost:5173
@@ -187,55 +225,59 @@ http://localhost:5173
 
 ---
 
-## 🔑 Environment Variables
+# 🐳 Docker
 
-Create:
+Build Image
 
-```text
-backend/.env
+```bash
+docker build -t document-intelligence .
 ```
 
-Example:
+Run Container
 
-```env
-GEMINI_API_KEY=YOUR_GEMINI_API_KEY
-TAVILY_API_KEY=YOUR_TAVILY_API_KEY
+```bash
+docker run -p 8000:8000 document-intelligence
 ```
 
 ---
 
-## 🎯 Key Highlights
+# ⚙️ CI/CD
 
-* Retrieval-Augmented Generation (RAG)
-* Multi-Document Question Answering
-* Semantic Search
-* Vector Embeddings
-* ChromaDB Integration
-* Redis Memory & Caching
-* Gemini AI Integration
-* Modern React Frontend
-* FastAPI Backend
-* Production-Ready Architecture
+GitHub Actions automatically:
+
+* Installs dependencies
+* Validates backend code
+* Builds frontend application
+* Runs on every push to master branch
 
 ---
 
-## 📈 Future Improvements
+# 🎯 Resume Highlights
 
-* Docker Deployment
-* Render Hosting
-* GitHub Actions CI/CD
-* User Authentication
-* Role-Based Access Control
-* OCR for Scanned PDFs
-* Voice Interaction
-* Multi-Language Support
+* Built an AI-powered Document Intelligence Platform using React, FastAPI, Gemini AI, ChromaDB, and Redis.
+* Implemented Retrieval-Augmented Generation (RAG) for context-aware document question answering.
+* Integrated semantic search using vector embeddings and ChromaDB.
+* Added Redis-based caching and chat memory.
+* Dockerized the application and implemented GitHub Actions CI pipeline.
+* Deployed using Render and Vercel.
 
 ---
 
-## 👨‍💻 Author
+# 🔮 Future Enhancements
 
-Subhadeep Pan
+* OCR Support (OLMOCR)
+* Qwen-VL Integration
+* Authentication & User Management
+* Cloud Vector Databases
+* Persistent Chat History
+* Advanced Analytics Dashboard
+
+---
+
+# 👨‍💻 Author
+
+### Subhadeep Pan
 
 Computer Science Engineering Student
 
-Built as an end-to-end AI Document Intelligence Platform using modern RAG architecture and Generative AI technologies.
+⭐ If you like this project, give it a star on GitHub!

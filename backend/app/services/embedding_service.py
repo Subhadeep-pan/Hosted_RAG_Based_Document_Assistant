@@ -1,14 +1,14 @@
-import google.generativeai as genai
+from google import genai
 import os
 
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 def create_embeddings(chunks):
     embeddings = []
     for chunk in chunks:
-        result = genai.embed_content(
-            model="models/embedding-001",  # ← change this line
-            content=chunk
+        result = client.models.embed_content(
+            model="gemini-embedding-001",
+            contents=chunk
         )
-        embeddings.append(result["embedding"])
+        embeddings.append(result.embeddings[0].values)
     return embeddings

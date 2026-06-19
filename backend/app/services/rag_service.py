@@ -1,24 +1,23 @@
-import google.generativeai as genai
+from google import genai
 import os
 from backend.app.services.chroma_service import collection
 
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 def retrieve_context(question):
-    result = genai.embed_content(
-        model="models/text-embedding-004",
-        content=question
+    result = client.models.embed_content(
+        model="gemini-embedding-001",
+        contents=question
     )
-    query_embedding = result["embedding"]
+    query_embedding = result.embeddings[0].values
 
-    result = genai.embed_content(
-    model="models/embedding-001",  # ← change this line
-    content=question
+    results = collection.query(
+        query_embeddings=[query_embedding],
+        n_results=5
     )
 
-    documents = result["documents"][0]
-    metadatas = result["metadatas"][0]
-
+    documents = results["documents"][0]
+    metadatas = results["metadatas"][0]
     context = "\n".join(documents)
 
     sources = []

@@ -44,6 +44,14 @@ function App() {
     onDrop: (files) => handleUpload(files),
   });
 
+  const openChat = async (chatId) => {
+    setCurrentChatId(chatId);
+    localStorage.setItem(LAST_CHAT_KEY, chatId);
+
+    const data = await getChatHistory(chatId).catch(() => ({ history: [] }));
+    setChatHistory(data.history || []);
+  };
+
   // On first load: fetch the list of chats for this browser. If none
   // exist yet, create one. Otherwise re-open whichever chat was open
   // last time (falling back to the most recent one).
@@ -79,14 +87,6 @@ function App() {
   useEffect(() => {
     localStorage.setItem("theme", darkMode ? "dark" : "light");
   }, [darkMode]);
-
-  const openChat = async (chatId) => {
-    setCurrentChatId(chatId);
-    localStorage.setItem(LAST_CHAT_KEY, chatId);
-
-    const data = await getChatHistory(chatId).catch(() => ({ history: [] }));
-    setChatHistory(data.history || []);
-  };
 
   const handleNewChat = async () => {
     // If the chat that is already open is still empty, just keep using

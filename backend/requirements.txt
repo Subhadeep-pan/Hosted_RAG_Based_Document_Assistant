@@ -1,3 +1,5 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 fastapi
 uvicorn
 google-generativeai
@@ -6,12 +8,8 @@ python-multipart
 pypdf
 chromadb
 sentence-transformers
-langchain
-langchain-community
-duckduckgo-search
 tavily-python
 redis==8.0.0
 python-docx==1.2.0
 Pillow==12.2.0
 pytesseract==0.3.13
-

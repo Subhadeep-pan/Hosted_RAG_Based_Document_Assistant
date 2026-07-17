@@ -1,947 +1,500 @@
 import { useState, useEffect, useRef } from "react";
 import { useDropzone } from "react-dropzone";
+import { FaRobot, FaPaperPlane, FaPlus, FaFileAlt, FaTrash, FaComment, FaPen } from "react-icons/fa";
 
-import { askQuestion } from "./api/chatApi";
+import { askQuestionStream } from "./api/chatApi";
 import { uploadFile } from "./api/uploadApi";
 import { resetProject } from "./api/resetApi";
 import { getSummary } from "./api/summaryApi";
-import {
-  FaUser,
-  FaRobot,
-  FaFileAlt,
-  FaUpload,
-  FaPaperPlane,
-  FaTrash
-} from "react-icons/fa";
+import { getChatHistory } from "./api/historyApi";
+import { getChats, createChat, deleteChat, renameChat } from "./api/chatsApi";
+import { getDocuments, deleteDocument } from "./api/docsApi";
+
+const LAST_CHAT_KEY = "last_chat_id";
 
 function App() {
-
-  const [darkMode, setDarkMode] =
-    useState(
-      localStorage.getItem(
-        "theme"
-      ) === "dark"
-    );
+  const [darkMode, setDarkMode] = useState(
+    localStorage.getItem("theme") === "dark"
+  );
 
   const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState("");
+  const [chatHistory, setChatHistory] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const [
-    chatHistory,
-    setChatHistory
-  ] = useState([]);
+  const [chats, setChats] = useState([]);
+  const [currentChatId, setCurrentChatId] = useState(null);
 
-  const [selectedFiles, setSelectedFiles] =
-    useState([]);
+  const [documents, setDocuments] = useState([]);
+  const [uploadMessage, setUploadMessage] = useState("");
 
-  const [uploadMessage, setUploadMessage] =
-    useState("");
+  // Replaces window.confirm/window.prompt with in-app modals - native
+  // browser dialogs can sometimes leave the page unresponsive to clicks
+  // afterward, plus a custom modal looks more polished.
+  const [confirmState, setConfirmState] = useState(null); // { message, onConfirm }
+  const [renameState, setRenameState] = useState(null); // { chat, value }
 
-  const [documents, setDocuments] =
-    useState([]);
+  const chatEndRef = useRef(null);
 
-  const chatEndRef =
-    useRef(null);
-
-  const {
-    getRootProps,
-    getInputProps
-  } = useDropzone({
-
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {
       "application/pdf": [".pdf"],
       "text/plain": [".txt"],
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        [".docx"]
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
     },
-
-    onDrop: (
-      acceptedFiles
-    ) => {
-
-      setSelectedFiles(
-        acceptedFiles
-      );
-
-    }
+    onDrop: (files) => handleUpload(files),
   });
 
+  // On first load: fetch the list of chats for this browser. If none
+  // exist yet, create one. Otherwise re-open whichever chat was open
+  // last time (falling back to the most recent one).
   useEffect(() => {
+    (async () => {
+      const existingChats = await getChats().catch(() => []);
 
-    chatEndRef.current?.
-      scrollIntoView({
-        behavior: "smooth"
-      });
+      if (existingChats.length === 0) {
+        const chatId = await createChat();
+        setChats([{ chat_id: chatId, title: "New Chat", created_at: Date.now() / 1000 }]);
+        openChat(chatId);
+        return;
+      }
 
-  }, [chatHistory]);
+      setChats(existingChats);
+
+      const lastChatId = localStorage.getItem(LAST_CHAT_KEY);
+      const stillExists = existingChats.some((chat) => chat.chat_id === lastChatId);
+
+      openChat(stillExists ? lastChatId : existingChats[0].chat_id);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
+    getDocuments().then(setDocuments).catch(() => {});
+  }, []);
 
-    localStorage.setItem(
-      "theme",
-      darkMode
-        ? "dark"
-        : "light"
-    );
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatHistory, loading]);
 
+  useEffect(() => {
+    localStorage.setItem("theme", darkMode ? "dark" : "light");
   }, [darkMode]);
 
+  const openChat = async (chatId) => {
+    setCurrentChatId(chatId);
+    localStorage.setItem(LAST_CHAT_KEY, chatId);
+
+    const data = await getChatHistory(chatId).catch(() => ({ history: [] }));
+    setChatHistory(data.history || []);
+  };
+
+  const handleNewChat = async () => {
+    // If the chat that is already open is still empty, just keep using
+    // it instead of piling up extra "New Chat" entries.
+    const alreadyOnEmptyChat = currentChatId && chatHistory.length === 0;
+    if (alreadyOnEmptyChat) return;
+
+    const chatId = await createChat();
+    setChats((prev) => [{ chat_id: chatId, title: "New Chat", created_at: Date.now() / 1000 }, ...prev]);
+    setCurrentChatId(chatId);
+    localStorage.setItem(LAST_CHAT_KEY, chatId);
+    setChatHistory([]);
+  };
+
+  const handleDeleteChat = (chatId, event) => {
+    event.stopPropagation();
+
+    setConfirmState({
+      message: "Delete this chat? This cannot be undone.",
+      onConfirm: async () => {
+        await deleteChat(chatId);
+
+        const remainingChats = chats.filter((chat) => chat.chat_id !== chatId);
+        setChats(remainingChats);
+
+        if (chatId !== currentChatId) return;
+
+        if (remainingChats.length > 0) {
+          openChat(remainingChats[0].chat_id);
+        } else {
+          handleNewChat();
+        }
+      },
+    });
+  };
+
+  const handleRenameChat = (chat, event) => {
+    event.stopPropagation();
+    setRenameState({ chat, value: chat.title });
+  };
+
+  const submitRename = async () => {
+    const { chat, value } = renameState;
+
+    if (value.trim()) {
+      await renameChat(chat.chat_id, value.trim());
+
+      setChats((prev) =>
+        prev.map((item) =>
+          item.chat_id === chat.chat_id ? { ...item, title: value.trim() } : item
+        )
+      );
+    }
+
+    setRenameState(null);
+  };
+
   const sendQuestion = async () => {
+    if (!question.trim() || loading || !currentChatId) return;
 
-    if (!question.trim())
-      return;
+    const userMessage = question;
+    setQuestion("");
+    setChatHistory((prev) => [...prev, { role: "User", text: userMessage }]);
+    setChatHistory((prev) => [...prev, { role: "Assistant", text: "" }]);
+    setLoading(true);
 
     try {
+      await askQuestionStream(userMessage, currentChatId, (chunk) => {
+        // Add each new chunk onto the last message (the assistant's reply).
+        setChatHistory((prev) => {
+          const updated = [...prev];
+          const lastIndex = updated.length - 1;
+          updated[lastIndex] = {
+            ...updated[lastIndex],
+            text: updated[lastIndex].text + chunk,
+          };
+          return updated;
+        });
+      });
 
-      setLoading(
-        true
-      );
-
-      const result =
-        await askQuestion(
-          question
-        );
-
-      setChatHistory(
-        prev => [
-          ...prev,
-          {
-            role: "user",
-            text: question
-          },
-          {
-            role: "assistant",
-            text: result.answer
-          }
-        ]
-      );
-
-      setQuestion("");
-
-      setLoading(
-        false
-      );
-
+      // The backend may have auto-generated a real title for this chat
+      // now that it has its first message - refresh the sidebar to show it.
+      const freshChats = await getChats().catch(() => null);
+      if (freshChats) setChats(freshChats);
     } catch {
-
-      setLoading(
-        false
-      );
-
-      setChatHistory(
-        prev => [
-          ...prev,
-          {
-            role: "assistant",
-            text:
-              "Error connecting to backend."
-          }
-        ]
-      );
+      setChatHistory((prev) => {
+        const updated = [...prev];
+        updated[updated.length - 1] = {
+          role: "Assistant",
+          text: "Error connecting to the backend.",
+        };
+        return updated;
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleUpload = async () => {
-
-    if (
-      selectedFiles.length === 0
-    ) {
-
-      setUploadMessage(
-        "Please select a file."
-      );
-
-      return;
-    }
+  const handleUpload = async (files) => {
+    if (!files || files.length === 0) return;
 
     try {
+      const result = await uploadFile(files);
+      setUploadMessage(result.message);
 
-      const result =
-        await uploadFile(
-          selectedFiles
-        );
-
-      setUploadMessage(
-        result.message
-      );
-
-      setDocuments(
-        (prev) => [
-          ...prev,
-          ...selectedFiles.map(
-            file => file.name
-          )
-        ]
-      );
-
-      setSelectedFiles(
-        []
-      );
-
+      const freshDocuments = await getDocuments();
+      setDocuments(freshDocuments);
     } catch (error) {
-
       console.error(error);
-
-      setUploadMessage(
-        "Upload failed."
-      );
+      setUploadMessage("Upload failed.");
     }
   };
 
-  const handleReset = async () => {
+  const handleDeleteDocument = (docId, event) => {
+    event.stopPropagation();
 
+    setConfirmState({
+      message: `Delete "${docId}"? This cannot be undone.`,
+      onConfirm: async () => {
+        await deleteDocument(docId);
+        setDocuments((prev) => prev.filter((doc) => doc !== docId));
+      },
+    });
+  };
+
+  // "Reset Project" only clears uploaded documents - it does NOT touch
+  // any chat conversations. Use "New Chat" / the trash icon for those.
+  const handleResetDocuments = async () => {
     try {
-
-      const result =
-        await resetProject();
-
+      const result = await resetProject();
       setDocuments([]);
-
-      setChatHistory([]);
-
-      setQuestion("");
-
-      setUploadMessage(
-        result.message
-      );
-
+      setUploadMessage(result.message);
     } catch (error) {
-
       console.error(error);
-
-      setUploadMessage(
-        "Reset failed."
-      );
+      setUploadMessage("Reset failed.");
     }
   };
 
-  const handleSummary =
-    async (docId) => {
+  const handleSummary = async (docId) => {
+    if (!currentChatId) return;
 
-      try {
+    setChatHistory((prev) => [...prev, { role: "User", text: `Summarize ${docId}` }]);
+    setLoading(true);
 
-        const result =
-          await getSummary(
-            docId
-          );
+    try {
+      const result = await getSummary(docId);
+      setChatHistory((prev) => [...prev, { role: "Assistant", text: result.summary }]);
+    } catch (error) {
+      console.error(error);
+      setChatHistory((prev) => [
+        ...prev,
+        { role: "Assistant", text: "Failed to load summary." },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        setChatHistory(
-          prev => [
-            ...prev,
-            {
-              role: "assistant",
-              text: result.summary
-            }
-          ]
-        );
-
-      } catch (error) {
-
-        console.error(error);
-
-        setAnswer(
-          "Failed to load summary."
-        );
-      }
-    };
+  const bg = darkMode ? "bg-slate-950 text-slate-100" : "bg-slate-50 text-slate-900";
+  const panel = darkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200";
 
   return (
+    <div className={`flex h-screen ${bg}`}>
+      {/* Sidebar */}
+      <aside className={`w-72 flex flex-col border-r ${panel} p-4`}>
+        <h1 className="text-lg font-semibold mb-4">
+          AI Resume Assistant
+        </h1>
 
-    <div
-      className={
-        darkMode
-          ? "min-h-screen bg-slate-950 text-slate-100"
-          : "min-h-screen bg-slate-50 text-slate-900"
-      }
-    >
+        <button
+          onClick={handleNewChat}
+          className="flex items-center gap-2 justify-center w-full py-2 rounded-xl border border-slate-500/30 hover:bg-slate-500/10 transition mb-3 text-sm font-medium"
+        >
+          <FaPlus /> New Chat
+        </button>
 
-      {/* Header */}
+        {/* Chat list - this is the main "ChatGPT style" chat history */}
+        <h2 className="text-xs uppercase tracking-wide text-slate-400 mb-2">Chats</h2>
+        <div className="flex-1 min-h-[8rem] overflow-y-auto mb-4">
+          {chats.length === 0 && (
+            <p className="text-sm text-slate-500">No chats yet.</p>
+          )}
 
-      <header
-        className={
-          darkMode
-            ? "border-b border-slate-800 sticky top-0 backdrop-blur bg-slate-950/80 z-50"
-            : "border-b border-slate-200 sticky top-0 backdrop-blur bg-white/80 z-50"
-        }
-      >
+          <ul className="space-y-1">
+            {chats.map((chat) => (
+              <li
+                key={chat.chat_id}
+                onClick={() => openChat(chat.chat_id)}
+                className={`group flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm cursor-pointer transition ${
+                  chat.chat_id === currentChatId
+                    ? darkMode
+                      ? "bg-slate-800"
+                      : "bg-slate-200"
+                    : darkMode
+                    ? "hover:bg-slate-800"
+                    : "hover:bg-slate-100"
+                }`}
+              >
+                <span className="flex items-center gap-2 truncate">
+                  <FaComment className="text-slate-400 shrink-0" />
+                  <span className="truncate">{chat.title}</span>
+                </span>
 
-        <div className="px-6 py-4 flex justify-between items-center">
+                <span className="opacity-0 group-hover:opacity-100 flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={(event) => handleRenameChat(chat, event)}
+                    className="text-slate-400 hover:text-indigo-600 transition"
+                    title="Rename chat"
+                  >
+                    <FaPen size={12} />
+                  </button>
 
-          <div>
-
-            <h1
-              className="
-                text-3xl
-                font-bold
-                bg-gradient-to-r
-                from-sky-500
-                to-indigo-500
-                bg-clip-text
-                text-transparent
-              "
-            >
-              AI Assistant
-            </h1>
-
-            <p className="text-slate-400">
-              RAG Powered Document Intelligence
-            </p>
-
-          </div>
-
-          <button
-            onClick={() =>
-              setDarkMode(
-                !darkMode
-              )
-            }
-            className="
-              flex
-              items-center
-              gap-2
-              px-4
-              py-2
-              rounded-2xl
-              bg-emerald-600
-              hover:bg-emerald-700
-              text-white
-              transition
-              shadow-sm
-              hover:shadow-md
-            "
-          >
-            {darkMode
-              ? "☀️ Light"
-              : "🌙 Dark"}
-          </button>
-
+                  <button
+                    onClick={(event) => handleDeleteChat(chat.chat_id, event)}
+                    className="text-slate-400 hover:text-red-500 transition"
+                    title="Delete chat"
+                  >
+                    <FaTrash size={12} />
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
 
-      </header>
-
-      <div className="flex">
-
-        {/* Sidebar */}
-
-        <aside
-          className={
-            darkMode
-              ? `
-                w-80
-                min-h-screen
-                border-r
-                border-slate-800
-                p-6
-              `
-              : `
-                w-80
-                min-h-screen
-                border-r
-                border-slate-200
-                bg-white
-                p-6
-              `
-          }
+        {/* Upload */}
+        <div
+          {...getRootProps()}
+          className={`border-2 border-dashed rounded-xl p-4 text-center text-sm cursor-pointer transition mb-4 ${
+            isDragActive ? "border-indigo-600 bg-indigo-600/10" : "border-slate-500/30 hover:bg-slate-500/5"
+          }`}
         >
+          <input {...getInputProps()} />
+          Drop files or click to upload
+          <div className="text-xs text-slate-400 mt-1">PDF • DOCX • TXT</div>
+        </div>
 
-          {/* Upload Card */}
+        {uploadMessage && <p className="text-xs text-slate-500 mb-3">{uploadMessage}</p>}
 
-          <div
-            className={
-              darkMode
-                ? `
-                  bg-slate-900
-                  rounded-2xl
-                  p-5
-                  border
-                  border-slate-800
-                `
-                : `
-                  bg-white
-                  rounded-2xl
-                  p-5
-                  border
-                  border-slate-200
-                  shadow-sm
-                `
-            }
-          >
+        {/* Document list */}
+        <div className="max-h-40 overflow-y-auto">
+          <h2 className="text-xs uppercase tracking-wide text-slate-400 mb-2">Documents</h2>
 
-            <h2
-              className="
-                text-lg
-                font-semibold
-                mb-4
-              "
-            >
-              Upload Document
-            </h2>
+          {documents.length === 0 && (
+            <p className="text-sm text-slate-500">No documents uploaded yet.</p>
+          )}
 
-            {/* Dropzone */}
-
-            <div
-              {...getRootProps()}
-              className={`
-                border-2
-                border-dashed
-                rounded-2xl
-                p-8
-                text-center
-                cursor-pointer
-                transition
-                mb-4
-                ${
-                  darkMode
-                    ? "border-slate-700 hover:bg-slate-800"
-                    : "border-sky-300 hover:bg-sky-50"
-                }
-              `}
-            >
-
-              <input
-                {...getInputProps()}
-              />
-
-              <div className="text-5xl mb-3">
-                📎
-              </div>
-
-              <p className="font-semibold">
-                Drag & Drop Files
-              </p>
-
-              <p
-                className="
-                  text-sm
-                  text-slate-500
-                  mt-2
-                "
+          <ul className="space-y-1">
+            {documents.map((doc, index) => (
+              <li
+                key={index}
+                onClick={() => handleSummary(doc)}
+                className={`group flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm cursor-pointer truncate transition ${
+                  darkMode ? "hover:bg-slate-800" : "hover:bg-slate-100"
+                }`}
+                title={`Summarize ${doc}`}
               >
-                PDF • DOCX • TXT
-              </p>
+                <span className="flex items-center gap-2 truncate">
+                  <FaFileAlt className="text-indigo-600 shrink-0" />
+                  <span className="truncate">{doc}</span>
+                </span>
 
-            </div>
+                <button
+                  onClick={(event) => handleDeleteDocument(doc, event)}
+                  className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition shrink-0"
+                  title="Delete this document"
+                >
+                  <FaTrash size={12} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
 
-            {/* Selected Files List */}
-
-            {
-              selectedFiles.length > 0 && (
-
-                <div className="mb-4">
-
-                  {
-                    selectedFiles.map(
-                      (
-                        file,
-                        index
-                      ) => (
-
-                        <div
-                          key={index}
-                          className={`
-                            px-3
-                            py-2
-                            rounded-xl
-                            mb-2
-                            ${
-                              darkMode
-                                ? "bg-slate-800"
-                                : "bg-sky-100 text-sky-700"
-                            }
-                          `}
-                        >
-
-                          📄 {file.name}
-
-                        </div>
-
-                      )
-                    )
-                  }
-
-                </div>
-
-              )
-            }
-
-            <button
-              onClick={handleUpload}
-              className="
-                w-full
-                flex
-                items-center
-                justify-center
-                gap-2
-                bg-gradient-to-r
-                from-sky-500
-                to-cyan-500
-                hover:from-sky-600
-                hover:to-cyan-600
-                text-white
-                transition
-                py-3
-                rounded-2xl
-                font-medium
-                shadow-md
-                hover:shadow-md
-              "
-            >
-              <FaUpload />
-              Upload
-            </button>
-
-            <p
-              className="
-                mt-3
-                text-sm
-                text-emerald-400
-              "
-            >
-              {uploadMessage}
-            </p>
-
-          </div>
-
-          {/* Documents List */}
-
-          <div className="mt-10">
-
-            <h2
-              className="
-                text-lg
-                font-semibold
-                mb-4
-              "
-            >
-              Documents
-            </h2>
-
-            {
-              documents.length === 0
-                ? (
-
-                  <div
-                    className="
-                      text-center
-                      py-8
-                    "
-                  >
-
-                    <div className="text-5xl mb-3">
-                      🤖
-                    </div>
-
-                    <p className="text-slate-500">
-                      No documents uploaded yet
-                    </p>
-
-                    <p
-                      className="
-                        text-xs
-                        text-slate-400
-                        mt-2
-                      "
-                    >
-                      Upload PDFs, DOCX or TXT files
-                    </p>
-
-                  </div>
-
-                )
-                : (
-
-                  <ul className="space-y-3">
-
-                    {
-                      documents.map(
-                        (
-                          document,
-                          index
-                        ) => (
-
-                          <li
-                            key={index}
-                            onClick={() =>
-                              handleSummary(
-                                document
-                              )
-                            }
-                            className={`
-                              flex
-                              items-center
-                              justify-between
-                              px-4
-                              py-3
-                              rounded-2xl
-                              cursor-pointer
-                              transition-all
-                              duration-200
-                              hover:scale-[1.02]
-                              ${
-                                darkMode
-                                  ? `
-                                    bg-slate-800
-                                    border
-                                    border-slate-700
-                                    hover:border-sky-500
-                                  `
-                                  : `
-                                    bg-white
-                                    border
-                                    border-slate-200
-                                    hover:border-sky-400
-                                    shadow-sm
-                                  `
-                              }
-                            `}
-                          >
-
-                            <div
-                              className="
-                                flex
-                                items-center
-                                gap-3
-                                overflow-hidden
-                              "
-                            >
-
-                              <div className="text-sky-500">
-                                📄
-                              </div>
-
-                              <span
-                                className="
-                                  truncate
-                                  text-sm
-                                  font-medium
-                                "
-                              >
-                                {document}
-                              </span>
-
-                            </div>
-
-                            <span
-                              className="
-                                text-xs
-                                text-slate-400
-                              "
-                            >
-                              Summary
-                            </span>
-
-                          </li>
-
-                        )
-                      )
-                    }
-
-                  </ul>
-
-                )
-            }
-
-          </div>
-
-          {/* Reset Button */}
-
-          <button
-            onClick={handleReset}
-            className={`
-              mt-10
-              w-full
-              flex
-              items-center
-              justify-center
-              gap-2
-              transition
-              py-3
-              rounded-2xl
-              font-medium
-              shadow-sm
-              hover:shadow-md
-              ${
-                darkMode
-                  ? "bg-slate-800 text-white hover:bg-slate-700"
-                  : "bg-slate-200 text-slate-700 hover:bg-slate-300"
-              }
-            `}
-          >
-            <FaTrash />
-            Reset Project
-          </button>
-
-        </aside>
-
-        {/* Main */}
-
-        <main
-          className="
-            flex-1
-            p-6
-          "
+        <button
+          onClick={handleResetDocuments}
+          className="mt-4 flex items-center gap-2 justify-center text-sm py-2 rounded-xl hover:bg-slate-500/10 transition"
+          title="Delete all uploaded documents (keeps your chats)"
         >
+          <FaTrash /> Reset Documents
+        </button>
 
-          <div
-            className={
-              darkMode
-                ? `
-                  bg-slate-900
-                  border
-                  border-slate-800
-                  rounded-2xl
-                  p-6
-                  h-[550px]
-                  overflow-y-auto
-                `
-                : `
-                  bg-white
-                  border
-                  border-slate-200
-                  rounded-2xl
-                  p-6
-                  h-[550px]
-                  overflow-y-auto
-                  shadow-sm
-                `
-            }
-          >
+        <button
+          onClick={() => setDarkMode(!darkMode)}
+          className="mt-2 text-sm py-2 rounded-xl hover:bg-slate-500/10 transition"
+        >
+          {darkMode ? "Light mode" : "Dark mode"}
+        </button>
+      </aside>
 
-            <h2
-              className="
-                text-emerald-400
-                font-semibold
-                mb-4
-              "
-            >
-              AI Response / Summary
-            </h2>
-
-            {/* Welcome Screen */}
-
-            {
-              chatHistory.length === 0 && (
-
-                <div
-                  className="
-                    flex
-                    flex-col
-                    items-center
-                    justify-center
-                    h-full
-                    text-center
-                  "
-                >
-
-                  <div className="text-6xl mb-4">
-                    🤖
+      {/* Main chat area */}
+      <main className="flex-1 flex flex-col">
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-3xl mx-auto px-4 py-8">
+            {chatHistory.length === 0 ? (
+              <div className="flex flex-col items-center justify-center text-center mt-24">
+                <FaRobot className="text-4xl text-indigo-600 mb-4" />
+                <h2 className="text-2xl font-semibold mb-2">Welcome to AI Resume Assistant</h2>
+                <p className="text-slate-500">Upload documents and ask questions to get started.</p>
+              </div>
+            ) : (
+              chatHistory.map((msg, index) => (
+                <div key={index} className="mb-6">
+                  <div className="flex items-center gap-2 mb-1 text-sm font-semibold">
+                    {msg.role === "User" ? (
+                      "You"
+                    ) : (
+                      <>
+                        <FaRobot className="text-indigo-600" /> Assistant
+                      </>
+                    )}
                   </div>
-
-                  <h2
-                    className="
-                      text-2xl
-                      font-bold
-                      mb-2
-                    "
-                  >
-                    Welcome to AI Assistant
-                  </h2>
-
-                  <p className="text-slate-500">
-                    Upload documents and ask questions
-                  </p>
-
+                  <div className="whitespace-pre-wrap leading-relaxed">{msg.text}</div>
                 </div>
+              ))
+            )}
 
-              )
-            }
+            {loading && chatHistory[chatHistory.length - 1]?.text === "" && (
+              <div className="flex items-center gap-2 text-slate-400 text-sm">
+                <FaRobot className="text-indigo-600" /> Thinking...
+              </div>
+            )}
 
-            {/* Chat History */}
-
-            {
-              chatHistory.map(
-                (
-                  msg,
-                  index
-                ) => (
-
-                  <div
-                    key={index}
-                    className={`
-                      flex
-                      mb-4
-                      ${
-                        msg.role === "user"
-                          ? "justify-end"
-                          : "justify-start"
-                      }
-                    `}
-                  >
-
-                    <div
-                      className={`
-                        max-w-[75%]
-                        rounded-2xl
-                        px-4
-                        py-3
-                        shadow-md
-                        ${
-                          msg.role === "user"
-                            ? "bg-indigo-500"
-                            : darkMode
-                              ? "bg-slate-800"
-                              : "bg-white border border-slate-200"
-                        }
-                      `}
-                    >
-
-                      <div className="flex items-center gap-2 mb-2">
-
-                        {
-                          msg.role === "user"
-                            ? <FaUser />
-                            : <FaRobot />
-                        }
-
-                        <span className="font-semibold">
-
-                          {
-                            msg.role === "user"
-                              ? "You"
-                              : "AI"
-                          }
-
-                        </span>
-
-                      </div>
-
-                      <pre className="whitespace-pre-wrap">
-
-                        {msg.text}
-
-                      </pre>
-
-                    </div>
-
-                  </div>
-
-                )
-              )
-            }
-
-            {/* Typing Indicator */}
-
-            {
-              loading && (
-
-                <div
-                  className="
-                    flex
-                    justify-start
-                    mb-4
-                  "
-                >
-
-                  <div
-                    className="
-                      px-4
-                      py-3
-                      rounded-2xl
-                      bg-slate-200
-                      text-slate-700
-                    "
-                  >
-
-                    🤖 AI is thinking...
-
-                  </div>
-
-                </div>
-
-              )
-            }
-
-            <div ref={chatEndRef}></div>
-
+            <div ref={chatEndRef} />
           </div>
+        </div>
 
-          <div
-            className="
-              flex
-              gap-3
-              mt-4
-            "
-          >
-
+        {/* Input bar */}
+        <div className={`border-t ${panel} p-4`}>
+          <div className="max-w-3xl mx-auto flex gap-3">
             <input
               type="text"
               value={question}
-              onChange={(e) =>
-                setQuestion(
-                  e.target.value
-                )
-              }
-              onKeyDown={(e) =>
-                e.key === "Enter" &&
-                sendQuestion()
-              }
+              onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && sendQuestion()}
               placeholder="Ask a question about your documents..."
-              className={
-                darkMode
-                  ? `
-                    flex-1
-                    bg-slate-900
-                    border
-                    border-slate-800
-                    rounded-2xl
-                    p-4
-                    outline-none
-                    focus:ring-2
-                    focus:ring-sky-500
-                  `
-                  : `
-                    flex-1
-                    bg-white
-                    border
-                    border-slate-300
-                    rounded-2xl
-                    p-4
-                    outline-none
-                    shadow-sm
-                    focus:ring-2
-                    focus:ring-sky-500
-                  `
-              }
+              className={`flex-1 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-600 border ${
+                darkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-300"
+              }`}
             />
-
             <button
               onClick={sendQuestion}
-              className="
-                flex
-                items-center
-                gap-2
-                bg-indigo-500
-                hover:bg-indigo-600
-                text-white
-                px-8
-                rounded-2xl
-                font-medium
-                transition
-                shadow-sm
-                hover:shadow-md
-              "
+              disabled={loading}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-6 rounded-2xl font-medium transition"
             >
-              <FaPaperPlane />
-              Send
+              <FaPaperPlane /> Send
             </button>
-
           </div>
+        </div>
+      </main>
 
-        </main>
+      {/* Confirm delete modal */}
+      {confirmState && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className={`rounded-xl p-6 w-80 border ${panel}`}>
+            <p className="mb-4 text-sm">{confirmState.message}</p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setConfirmState(null)}
+                className="px-4 py-2 text-sm rounded-lg hover:bg-slate-500/10 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  confirmState.onConfirm();
+                  setConfirmState(null);
+                }}
+                className="px-4 py-2 text-sm rounded-lg bg-red-500 hover:bg-red-600 text-white transition"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-      </div>
-
+      {/* Rename chat modal */}
+      {renameState && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className={`rounded-xl p-6 w-80 border ${panel}`}>
+            <p className="mb-3 text-sm font-medium">Rename chat</p>
+            <input
+              autoFocus
+              value={renameState.value}
+              onChange={(e) => setRenameState({ ...renameState, value: e.target.value })}
+              onKeyDown={(e) => e.key === "Enter" && submitRename()}
+              className={`w-full rounded-lg px-3 py-2 mb-4 border outline-none focus:ring-2 focus:ring-indigo-600 ${
+                darkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-300"
+              }`}
+            />
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setRenameState(null)}
+                className="px-4 py-2 text-sm rounded-lg hover:bg-slate-500/10 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitRename}
+                className="px-4 py-2 text-sm rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

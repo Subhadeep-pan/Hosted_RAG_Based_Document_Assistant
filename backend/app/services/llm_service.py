@@ -1,15 +1,15 @@
-from google import genai
-import os
+import google.generativeai as genai
+from backend.app.core.config import GEMINI_API_KEY
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+genai.configure(api_key=GEMINI_API_KEY)
+
 
 def generate_answer(prompt):
     try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt
-        )
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        response = model.generate_content(prompt)
         return response.text
+
     except Exception:
         return (
             "Gemini API rate limit reached. "

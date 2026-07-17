@@ -1,10 +1,11 @@
 fastapi
 uvicorn
-google-genai
+google-generativeai
 python-dotenv
 python-multipart
 pypdf
 chromadb
+sentence-transformers
 langchain
 langchain-community
 duckduckgo-search

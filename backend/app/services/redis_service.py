@@ -1,12 +1,10 @@
-import os
 import redis
-from dotenv import load_dotenv
-
-load_dotenv("backend/.env")
+from backend.app.core.config import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_SSL
 
 redis_client = redis.Redis(
-    host=os.getenv("REDIS_HOST"),
-    port=int(os.getenv("REDIS_PORT")),
-    password=os.getenv("REDIS_PASSWORD"),
+    host=REDIS_HOST,
+    port=REDIS_PORT,
+    password=REDIS_PASSWORD,
+    ssl=REDIS_SSL,
     decode_responses=True
 )

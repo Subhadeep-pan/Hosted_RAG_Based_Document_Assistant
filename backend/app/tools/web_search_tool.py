@@ -1,36 +1,29 @@
 from tavily import TavilyClient
-import os
-from dotenv import load_dotenv
+from backend.app.core.config import TAVILY_API_KEY
 
-load_dotenv("backend/.env")
-
-client = TavilyClient(
-    api_key=os.getenv(
-        "TAVILY_API_KEY"
-    )
-)
+client = TavilyClient(api_key=TAVILY_API_KEY)
 
 
 def search_web(query):
-
     try:
-
         response = client.search(
             query=query,
-            max_results=3
+            max_results=3,
+            include_answer=True,
         )
 
-        results = ""
+        if response.get("answer"):
+            return response["answer"]
 
-        for item in response["results"]:
+        results = response.get("results", [])
 
-            results += (
-                item["title"]
-                + "\n"
-            )
+        if not results:
+            return "No information found."
 
-        return results
+        return "\n\n".join(
+            item.get("content") or item.get("title", "")
+            for item in results
+        )
 
-    except Exception as e:
-
-        return str(e)
+    except Exception:
+        return "Web search failed."

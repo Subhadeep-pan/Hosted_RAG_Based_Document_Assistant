@@ -1,10 +1,10 @@
-name: CI - Test Backend
+name: CI - Test Backend & Frontend
 
 on:
   push:
-    branches: [master]
+    branches: [main, master]
   pull_request:
-    branches: [master]
+    branches: [main, master]
 
 jobs:
   test-backend:
@@ -12,10 +12,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
@@ -27,20 +27,29 @@ jobs:
       - name: Check for syntax errors
         run: |
           python -m py_compile backend/app/main.py
+          python -m py_compile backend/app/core/config.py
+          python -m py_compile backend/app/core/auth.py
           python -m py_compile backend/app/api/upload.py
+          python -m py_compile backend/app/api/chat.py
+          python -m py_compile backend/app/api/chats.py
+          python -m py_compile backend/app/api/documents.py
+          python -m py_compile backend/app/api/reset.py
+          python -m py_compile backend/app/api/summary.py
           python -m py_compile backend/app/services/embedding_service.py
           python -m py_compile backend/app/services/llm_service.py
           python -m py_compile backend/app/services/rag_service.py
+          python -m py_compile backend/app/services/redis_service.py
+          python -m py_compile backend/app/services/chroma_service.py
 
   test-frontend:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
 
@@ -49,9 +58,14 @@ jobs:
           cd frontend
           npm install
 
+      - name: Lint frontend
+        run: |
+          cd frontend
+          npm run lint
+
       - name: Build frontend
         run: |
           cd frontend
           npm run build
         env:
-          VITE_API_URL: https://document-intelligence-platform-214a.onrender.com
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}

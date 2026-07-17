@@ -3,3 +3,7 @@ node_modules
 __pycache__
 .git
 .env
+backend/.env
+backend/uploads
+backend/app/vectorstore
+frontend

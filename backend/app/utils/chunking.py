@@ -1,11 +1,27 @@
-def chunk_text(text, chunk_size=500):
+import re
+
+def chunk_text(text, chunk_size=500, overlap=50):
+    """Split text into chunks while keeping sentence boundaries."""
+
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
 
     chunks = []
+    chunk = ""
 
-    for i in range(0, len(text), chunk_size):
+    for sentence in sentences:
 
-        chunks.append(
-            text[i:i + chunk_size]
-        )
+        if len(chunk) + len(sentence) <= chunk_size:
+            chunk += sentence + " "
+        else:
+            if chunk:
+                chunks.append(chunk.strip())
+
+            if overlap:
+                chunk = chunk[-overlap:]
+
+            chunk += sentence + " "
+
+    if chunk:
+        chunks.append(chunk.strip())
 
     return chunks

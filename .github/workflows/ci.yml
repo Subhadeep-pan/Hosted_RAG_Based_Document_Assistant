@@ -1,29 +1,23 @@
 name: CI - Test Backend & Frontend
-
 on:
   push:
     branches: [main, master]
   pull_request:
     branches: [main, master]
-
 jobs:
   test-backend:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Install dependencies
         run: |
           cd backend
           pip install -r requirements.txt
-
       - name: Check for syntax errors
         run: |
           python -m py_compile backend/app/main.py
@@ -40,32 +34,50 @@ jobs:
           python -m py_compile backend/app/services/rag_service.py
           python -m py_compile backend/app/services/redis_service.py
           python -m py_compile backend/app/services/chroma_service.py
-
   test-frontend:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-
       - name: Install dependencies
         run: |
           cd frontend
           npm install
-
       - name: Lint frontend
         run: |
           cd frontend
           npm run lint
-
       - name: Build frontend
         run: |
           cd frontend
           npm run build
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
+
+  deploy:
+    name: Deploy to Render & Vercel
+    needs: [test-backend, test-frontend]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy (backend)
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}")
+          if [ "$response" -ne 200 ] && [ "$response" -ne 201 ]; then
+            echo "Render deploy hook failed with status $response"
+            exit 1
+          fi
+          echo "Render deploy triggered successfully"
+
+      - name: Trigger Vercel deploy (frontend)
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${{ secrets.VERCEL_DEPLOY_HOOK_URL }}")
+          if [ "$response" -ne 200 ] && [ "$response" -ne 201 ]; then
+            echo "Vercel deploy hook failed with status $response"
+            exit 1
+          fi
+          echo "Vercel deploy triggered successfully"
